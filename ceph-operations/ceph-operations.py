@@ -30,12 +30,11 @@ def execute_shell_command(command):
         if out != '':
             sys.stdout.write(out)    
 
-
 def ceph_install(ceph_home):   
     read_config(config_file)
     
     '''
-        create a directory on your admin node node for maintaining the
+        Create a directory on your admin node node for maintaining the
         configuration that ceph-deploy generates for our cluster.
         If directory exists empty the directory contents
     '''
@@ -61,6 +60,7 @@ def ceph_install(ceph_home):
     '''    
        Install ceph
     '''
+    
     conf_dict = get_config_section_map('INSTALL', 'ceph_nodes')
     ceph_nodes = conf_dict.values()[0].replace(',','')
     command = 'ceph-deploy install %s' %(ceph_nodes)
@@ -104,6 +104,7 @@ def ceph_install(ceph_home):
     '''
        Prepare OSDs
     '''
+    
     prepare_command = 'ceph-deploy osd prepare %s' %(osd_device_install)
     execute_shell_command(prepare_command)
 
@@ -143,7 +144,6 @@ def main():
     if args.ceph_dir:
         ceph_dir = args.ceph_dir
         
-
     if operation == 'install':
         ceph_install(ceph_dir)
         
