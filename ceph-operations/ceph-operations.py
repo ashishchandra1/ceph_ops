@@ -24,17 +24,7 @@ def get_config_section_map(section, sub_section):
         else:
             pass
     return conf_dict
-'''   
-def execute_shell_command(command):
-    p = subprocess.Popen(command, shell=True, stderr=subprocess.PIPE)
-    while True:
-        out = p.stderr.read(1)
-        if out == '' and p.poll() != None:
-            break
-        if out != '':
-            sys.stdout.write(out)    
-'''
-            
+
 def execute_shell_command(command):
     p = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE)
     while True:
