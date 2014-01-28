@@ -2,8 +2,12 @@ import ConfigParser
 import os
 import subprocess
 import sys
+
+import paramiko
+
 from argparse import ArgumentParser, ArgumentError
 from os.path import expanduser
+
 
 config = ConfigParser.ConfigParser()
 config_file = 'deploy_config.ini'
@@ -20,7 +24,7 @@ def get_config_section_map(section, sub_section):
         else:
             pass
     return conf_dict
-    
+'''   
 def execute_shell_command(command):
     p = subprocess.Popen(command, shell=True, stderr=subprocess.PIPE)
     while True:
@@ -29,7 +33,131 @@ def execute_shell_command(command):
             break
         if out != '':
             sys.stdout.write(out)    
+'''
+            
+def execute_shell_command(command):
+    p = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE)
+    while True:
+        out = p.stdout.read(1)
+        if out == '' and p.poll() != None:
+            break
+        if out != '':
+            sys.stdout.write(out)
+            return out   
+       
+def remote_ssh(server, username, command):
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.connect(server, username=username)
+    stdin, stdout, stderr = ssh.exec_command(command)
+    for line in stdout.readlines():
+        print line  
+            
+def add_new_monitor(ceph_home):
+    pass
+            
+def remove_existing_monitor(ceph_home):
+    pass
+            
+def add_new_osd(ceph_home):
+    read_config(config_file)
+    os.chdir(ceph_home)
+    
+    '''
+        Create the OSD. If no UUID is given, it will be set automatically
+        when the OSD starts up
+    '''
 
+    osd_create_command='ceph osd create'
+    osd_no = execute_shell_command(osd_create_command)
+    
+    '''
+       Create the default directory on your new OSD.
+    '''
+    
+    osd_dir = 'sudo mkdir -p /var/lib/ceph/osd/ceph-%s' %(osd_no)
+    remote_ssh('ceph-node4', 'ceph', osd_dir) 
+    
+    '''
+        If the OSD is for a drive other than the OS drive, prepare it for use 
+        with Ceph, and mount it to the directory you just created
+       
+        Create and mount the device
+    '''   
+    osd_nodes = {}
+    conf_dict = get_config_section_map('NEW_OSD', 'osd_nodes')
+    for node in conf_dict.values():
+        for osd_node in node.split(','):
+            node = osd_node.strip().split(':')
+            osd_nodes[node[0]] = node[1] 
+ 
+    '''
+       Format and mount device on all nodes
+    '''   
+    
+    for node in osd_nodes.keys(): 
+        format_system = 'sudo mkfs -t xfs -f /dev/%s' %(osd_nodes[node])
+        remote_ssh(node, 'ceph', format_system)
+        mount_command = 'sudo mount  /dev/%s /var/lib/ceph/osd/ceph-%s' %(osd_nodes[node], osd_no)
+        remote_ssh(node, 'ceph', mount_command)
+        
+        '''
+            Install ceph on the new node and copy configurations file
+            from admin node in /etc/ceph directory
+        '''
+
+        command = 'ceph-deploy install %s' %(node)
+        execute_shell_command(command)
+
+        '''
+            Copy configurations file to a new node using ceph-deploy
+        '''
+        
+        command = 'ceph-deploy admin %s' %(node)
+        execute_shell_command(command)   
+    
+    for node in osd_nodes.keys(): 
+        '''
+            Initialize the OSD data directory.
+        '''
+    
+        init_command = 'sudo ceph-osd -i %s --mkfs --mkkey' %(osd_no)
+        remote_ssh(node, 'ceph', init_command)
+
+        '''
+            Register ceph osd key
+        '''
+    
+        register_command = 'sudo ceph auth add osd.%s osd "allow *" mon "allow rwx" -i /var/lib/ceph/osd/ceph-%s/keyring' %(osd_no, osd_no)
+        remote_ssh(node, 'ceph', register_command)
+    
+        '''
+            Add node to the bucket
+        '''
+        
+        command = 'ceph osd crush add-bucket %s host' %(node)
+        remote_ssh(node, 'ceph', command)
+    
+        command = 'ceph osd crush move %s root=default' %(node)
+        remote_ssh(node, 'ceph', command)
+    
+        '''
+           Add OSD to crush map
+        '''
+    
+        command = 'ceph osd crush add osd.%s 1.0 host=%s' %(osd_no, node)  ## may need to change
+        remote_ssh(node, 'ceph', command)
+    
+        '''
+           Start the OSD
+        '''
+    
+        start_command = 'sudo start ceph-osd id=%s' %(osd_no)
+        remote_ssh(node, 'ceph', start_command)
+       
+def remove_existing_osd(ceph_home):
+    pass            
+    
 def ceph_install(ceph_home):   
     read_config(config_file)
     
@@ -147,6 +275,18 @@ def main():
     if operation == 'install':
         ceph_install(ceph_dir)
         
+    if operation == 'add_monitor':
+        add_new_monitor(ceph_dir)
+    
+    if operation == 'remove_monitor':
+        remove_existing_monitor(ceph_dir)
+            
+    if operation == 'add_osd':
+        add_new_osd(ceph_dir)
+    
+    if operation == 'remove_osd':
+        remove_existing_osd(ceph_dir)
+    
     else:
         print "Coming soon............"
         sys.exit()
