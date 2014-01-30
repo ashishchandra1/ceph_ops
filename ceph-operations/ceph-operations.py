@@ -128,8 +128,13 @@ def add_new_osd(ceph_home):
         '''
 
         register_command = 'sudo ceph auth add osd.%s osd "allow *" mon \
+<<<<<<< HEAD
 "allow rwx" -i /var/lib/ceph/osd/ceph-%s/keyring' % (osd_no, osd_no)
 
+=======
+                           "allow rwx" -i /var/lib/ceph/osd/ceph-%s/\
+                            keyring' % (osd_no, osd_no)
+>>>>>>> 3d67b9670c7bf38631ea2454092adbb2f2d3b483
         remote_ssh(node, 'ceph', register_command)
 
         '''
